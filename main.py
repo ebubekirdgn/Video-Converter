@@ -1,93 +1,90 @@
-import wx
-import threading
+import tkinter as tk
+from tkinter import filedialog, messagebox
 from moviepy.editor import VideoFileClip
+import threading
 import os
 
-# Uyumlu format dönüşümleri
-compatible_formats = {
-    'mov': ['mp4', 'avi', 'mkv', 'flv'],
-    'mp4': ['mov', 'avi', 'mkv', 'flv'],
-    'avi': ['mov', 'mp4', 'mkv', 'flv'],
-    'mkv': ['mov', 'mp4', 'avi', 'flv'],
-    'flv': ['mov', 'mp4', 'avi', 'mkv']
-}
-
-class VideoConverterFrame(wx.Frame):
-    def __init__(self):
-        super().__init__(parent=None, title='Video Converter', size=(500, 200))
-        panel = wx.Panel(self)
+def select_file():
+    # .mov dosyasını seçmek için bir dosya diyalogu aç
+    file_path.set(filedialog.askopenfilename(filetypes=[("MOV files", "*.mov")]))
+    
+def select_folder():
+    # Klasör seçimi için bir diyalog aç
+    folder_path.set(filedialog.askdirectory())
+    
+def convert_to_mp4_single_file(mov_file_path, output_folder):
+    try:
+        # Dosya adını ve uzantısını al
+        file_name = os.path.splitext(os.path.basename(mov_file_path))[0]
+        mp4_file_path = os.path.join(output_folder, f'{file_name}.mp4')
         
-        # GridBagSizer oluşturma
-        main_sizer = wx.GridBagSizer(vgap=10, hgap=10)
+        # Video dosyasını dönüştür
+        clip = VideoFileClip(mov_file_path)
+        clip.write_videofile(mp4_file_path, codec='libx264')
+        
+        return f"{mov_file_path} başarıyla {mp4_file_path} olarak dönüştürüldü."
+    except Exception as e:
+        return f"{mov_file_path} dönüştürülürken hata oluştu:\n{str(e)}"
 
-        # Uzantı seçimi için ComboBox
-        format_label = wx.StaticText(panel, label='Convert To:')
-        main_sizer.Add(format_label, pos=(0, 0), flag=wx.ALIGN_CENTER_VERTICAL|wx.ALIGN_RIGHT|wx.ALL, border=5)
-        self.format_combo = wx.ComboBox(panel, choices=['mp4', 'avi', 'mkv', 'flv'], style=wx.CB_DROPDOWN)
-        main_sizer.Add(self.format_combo, pos=(0, 1), flag=wx.EXPAND|wx.ALL, border=5)
+def convert_all_in_folder():
+    folder = folder_path.get()
+    
+    if not folder:
+        messagebox.showerror("Hata", "Lütfen bir klasör seçin.")
+        return
+    
+    def conversion_thread():
+        try:
+            # Seçilen klasördeki tüm .mov veya .MOV dosyalarını listele
+            mov_files = [f for f in os.listdir(folder) if f.lower().endswith('.mov')]
+            
+            if not mov_files:
+                messagebox.showinfo("Bilgi", "Seçilen klasörde .mov dosyası bulunamadı.")
+                return
+            
+            output_folder = folder  # Aynı klasöre çıktı dosyalarını kaydetmek için
 
-        # Video dosyası seçme
-        file_picker_label = wx.StaticText(panel, label='Select Video File:')
-        main_sizer.Add(file_picker_label, pos=(1, 0), flag=wx.ALIGN_CENTER_VERTICAL|wx.ALIGN_RIGHT|wx.ALL, border=5)
-        self.file_picker = wx.FilePickerCtrl(panel, wildcard="Video files (*.mov;*.mp4;*.avi;*.mkv;*.flv)|*.mov;*.mp4;*.avi;*.mkv;*.flv")
-        main_sizer.Add(self.file_picker, pos=(1, 1), span=(1, 2), flag=wx.EXPAND|wx.ALL, border=5)
+            results = []
+            for mov_file in mov_files:
+                # Her dosya için tam yol oluştur
+                full_mov_path = os.path.join(folder, mov_file)
+                result = convert_to_mp4_single_file(full_mov_path, output_folder)
+                results.append(result)
 
-        # Dönüştürme butonu
-        convert_button = wx.Button(panel, label='Convert')
-        main_sizer.Add(convert_button, pos=(2, 1), span=(1, 1), flag=wx.EXPAND|wx.ALL|wx.ALIGN_CENTER_HORIZONTAL, border=5)
-        convert_button.Bind(wx.EVT_BUTTON, self.on_convert)
+            # Tamamlandığında kullanıcıya tüm sonuçları göster
+            messagebox.showinfo("Dönüştürme Tamamlandı", "\n".join(results))
+        except Exception as e:
+            messagebox.showerror("Hata", f"Dönüştürme sırasında bir hata oluştu:\n{str(e)}")
 
-        # İlerleme durumu için StaticText
-        self.progress_text = wx.StaticText(panel, label='')
-        main_sizer.Add(self.progress_text, pos=(3, 0), span=(1, 3), flag=wx.EXPAND|wx.ALL|wx.ALIGN_CENTER_HORIZONTAL, border=5)
+    threading.Thread(target=conversion_thread).start()
 
-        panel.SetSizerAndFit(main_sizer)
-        self.Show()
+# Ana pencereyi oluştur
+root = tk.Tk()
+root.title("MOV to MP4 Converter")
+root.geometry("400x200")
 
-    def on_convert(self, event):
-        file_path = self.file_picker.GetPath()
-        selected_format = self.format_combo.GetValue()
+file_path = tk.StringVar()
+folder_path = tk.StringVar()
 
-        if not file_path:
-            wx.MessageBox('Please select a video file.', 'Error', wx.OK | wx.ICON_ERROR)
-            return
+# Video Yükle butonu
+load_button = tk.Button(root, text="Tek Video Yükle", command=select_file)
+load_button.pack(pady=10)
 
-        # Dosya uzantısını kontrol etme
-        _, file_extension = os.path.splitext(file_path)
-        file_extension = file_extension[1:].lower()  # "." işaretini kaldır ve küçük harfe çevir
+# Seçilen dosya yolunu göstermek için etiket
+file_label = tk.Label(root, textvariable=file_path)
+file_label.pack(pady=5)
 
-        if file_extension not in compatible_formats:
-            wx.MessageBox('Selected file format is not supported.', 'Error', wx.OK | wx.ICON_ERROR)
-            return
+# Klasör Seç butonu
+folder_button = tk.Button(root, text="Klasör Seç", command=select_folder)
+folder_button.pack(pady=10)
 
-        if selected_format not in compatible_formats[file_extension]:
-            wx.MessageBox(f'File cannot be converted to {selected_format}.', 'Error', wx.OK | wx.ICON_ERROR)
-            return
+# Seçilen klasörü göstermek için etiket
+folder_label = tk.Label(root, textvariable=folder_path)
+folder_label.pack(pady=5)
 
-        # Dönüşüm işlemini başlat
-        self.start_conversion(file_path, selected_format)
+# Dönüştür butonu (Klasördeki tüm dosyalar)
+convert_folder_button = tk.Button(root, text="Tüm .mov Dosyalarını Dönüştür", command=convert_all_in_folder)
+convert_folder_button.pack(pady=10)
 
-    def start_conversion(self, file_path, selected_format):
-        # Dönüşüm işlemini başlatmadan önce ilerleme durumunu göster
-        self.progress_text.SetLabel('Conversion in progress...')
-
-        def conversion_thread():
-            try:
-                base_name, _ = os.path.splitext(file_path)
-                output_file_path = f"{base_name}.{selected_format}"
-
-                clip = VideoFileClip(file_path)
-                clip.write_videofile(output_file_path, codec='libx264')
-
-                wx.CallAfter(self.progress_text.SetLabel, f'Conversion completed! File path: {output_file_path}')
-            except Exception as e:
-                wx.CallAfter(wx.MessageBox, f'An error occurred during conversion:\n{str(e)}', 'Error', wx.OK | wx.ICON_ERROR)
-                wx.CallAfter(self.progress_text.SetLabel, 'Conversion failed.')
-
-        # Dönüşüm işlemini başlat (thread)
-        threading.Thread(target=conversion_thread).start()
-
-if __name__ == '__main__':
-    app = wx.App(False)
-    frame = VideoConverterFrame()
-    app.MainLoop()
+# Pencereyi çalıştır
+root.mainloop()
