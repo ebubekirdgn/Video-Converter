@@ -6,8 +6,7 @@ Video-Converter
 A simple video converter application built using `wxPython` and `moviepy` libraries. This application allows you to convert video files between different formats such as mp4, avi, mkv, flv, and mov.
 
 ## Features
-- Convert video files to various formats (mp4, avi, mkv, flv, mov)
-- Progress bar to show conversion progress
+- Convert video files to various formats (mov to mp4)
 - User-friendly GUI built with `wxPython`
 ## Prerequisites
 - Python 3.x
